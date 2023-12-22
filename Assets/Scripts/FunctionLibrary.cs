@@ -7,12 +7,32 @@ public static class FunctionLibrary
 {
     public delegate Vector3 Function (float u, float v, float t);
 
-    public enum FunctionName { Wave, MultiWave, Ripple, Sphere, RotatingRidgedSphere, Torus, RotatingRidgedTorus };
-    static Function[] functions = { Wave, MultiWave, Ripple, Sphere, RotatingRidgedSphere, Torus, RotatingRidgedTorus };
+    public enum FunctionName { Wave, MultiWave, Ripple, Sphere, RotatingRidgedSphere, Torus, RotatingRidgedTorus, OceanWave };
+    static Function[] functions = { Wave, MultiWave, Ripple, Sphere, RotatingRidgedSphere, Torus, RotatingRidgedTorus, OceanWave };
 
     public static Function GetFunction (FunctionName name) 
     {
 		return functions[(int)name];
+	}
+
+	public static FunctionName GetRandomFunctionNameOtherThan (FunctionName name) 
+	{
+		var choice = (FunctionName)Random.Range(1, functions.Length);
+		return choice == name ? 0 : choice;
+	}
+	public static FunctionName GetNextFunctionName (FunctionName name) 
+    {
+		if ((int)name < functions.Length - 1) {
+			return name + 1;
+		}
+		else {
+			return 0;
+		}
+	}
+
+	public static Vector3 Morph (float u, float v, float t, Function from, Function to, float progress) 
+	{
+		return Vector3.LerpUnclamped(from(u, v, t), to(u, v, t), SmoothStep(0f, 1f, progress));
 	}
 
     public static Vector3 Wave (float u, float v, float t) //f(x,t) = sin(p * i(x+t))
@@ -32,6 +52,23 @@ public static class FunctionLibrary
 		p.y = Sin(PI * (u + 0.5f * t));
 		p.y += 0.5f * Sin(2f * PI * (v + t));
 		p.y += Sin(PI * (u + v + 0.25f * t));
+		p.y *= 1f / 2.5f;
+		p.z = v;
+		return p;
+	}
+
+	public static Vector3 OceanWave (float u, float v, float t) // f(x,t) = sin(pi(x+(0.5 *t)) + 0.5sin(2pi(x+t)) 
+    {
+		Vector3 p;
+		p.x = u;
+		p.y = 0.3f * Sin(PI * (u + 0.5f * t));
+		p.y += 0.3f * Sin(2f * PI * (v + t));
+		// p.y += Sin(PI * (u + v + 0.25f * t));
+		p.y += 0.3f*Sin(3f * PI * (u + v + 0.15f * t));
+		p.y += -0.3f*Sin(0.3f *PI * (u + v + 0.55f * t));
+		p.y += -0.3f*Sin(2f *PI * (u + v + 0.85f * t));
+		p.y += 0.3f*Sin(0.1f*PI * (u + v + 0.25f * t));
+		p.y += -0.3f *Sin(0.4f*PI * (u + v + 0.75f * t));
 		p.y *= 1f / 2.5f;
 		p.z = v;
 		return p;
