@@ -1,0 +1,272 @@
+#pragma kernel WaveKernel
+#pragma kernel WaveToMultiWaveKernel
+#pragma kernel WaveToRippleKernel
+#pragma kernel WaveToSphereKernel
+#pragma kernel WaveToRotatingRidgedSphereKernel
+#pragma kernel WaveToTorusKernel
+#pragma kernel WaveToRotatingRidgedTorusKernel
+#pragma kernel WaveToOceanWaveKernel
+
+#pragma kernel MultiWaveToWaveKernel
+#pragma kernel MultiWaveKernel
+#pragma kernel MultiWaveToRippleKernel
+#pragma kernel MultiWaveToSphereKernel
+#pragma kernel MultiWaveToRotatingRidgedSphereKernel
+#pragma kernel MultiWaveToTorusKernel
+#pragma kernel MultiWaveToRotatingRidgedTorusKernel
+#pragma kernel MultiWaveToOceanWaveKernel
+
+#pragma kernel RippleToWaveKernel
+#pragma kernel RippleToMultiWaveKernel
+#pragma kernel RippleKernel
+#pragma kernel RippleToSphereKernel
+#pragma kernel RippleToRotatingRidgedSphereKernel
+#pragma kernel RippleToTorusKernel
+#pragma kernel RippleToRotatingRidgedTorusKernel
+#pragma kernel RippleToOceanWaveKernel
+
+#pragma kernel SphereToWaveKernel
+#pragma kernel SphereToMultiWaveKernel
+#pragma kernel SphereToRippleKernel
+#pragma kernel SphereKernel
+#pragma kernel SphereToRotatingRidgedSphereKernel
+#pragma kernel SphereToTorusKernel
+#pragma kernel SphereToRotatingRidgedTorusKernel
+#pragma kernel SphereToOceanWaveKernel
+
+#pragma kernel RotatingRidgedSphereToWaveKernel
+#pragma kernel RotatingRidgedSphereToMultiWaveKernel
+#pragma kernel RotatingRidgedSphereToRippleKernel
+#pragma kernel RotatingRidgedSphereToSphereKernel
+#pragma kernel RotatingRidgedSphereKernel
+#pragma kernel RotatingRidgedSphereToRotatingRidgedTorusKernel
+#pragma kernel RotatingRidgedSphereToTorusKernel
+#pragma kernel RotatingRidgedSphereToOceanWaveKernel
+
+#pragma kernel TorusToWaveKernel
+#pragma kernel TorusToMultiWaveKernel
+#pragma kernel TorusToRippleKernel
+#pragma kernel TorusToSphereKernel
+#pragma kernel TorusToRotatingRidgedSphereKernel
+#pragma kernel TorusKernel
+#pragma kernel TorusToRotatingRidgedTorusKernel
+#pragma kernel TorusToOceanWaveKernel
+
+#pragma kernel RotatingRidgedTorusToWaveKernel
+#pragma kernel RotatingRidgedTorusToMultiWaveKernel
+#pragma kernel RotatingRidgedTorusToRippleKernel
+#pragma kernel RotatingRidgedTorusToSphereKernel
+#pragma kernel RotatingRidgedTorusToRotatingRidgedSphereKernel
+#pragma kernel RotatingRidgedTorusToTorusKernel
+#pragma kernel RotatingRidgedTorusKernel
+#pragma kernel RotatingRidgedTorusToOceanWaveKernel
+
+#pragma kernel OceanWaveToWaveKernel
+#pragma kernel OceanWaveToMultiWaveKernel
+#pragma kernel OceanWaveToRippleKernel
+#pragma kernel OceanWaveToSphereKernel
+#pragma kernel OceanWaveToRotatingRidgedSphereKernel
+#pragma kernel OceanWaveToTorusKernel
+#pragma kernel OceanWaveToRotatingRidgedTorusKernel
+#pragma kernel OceanWaveKernel
+
+RWStructuredBuffer<float3> _Positions;
+uint _Resolution;
+float _Step, _Time, _TransitionProgress;
+
+// takes a points thread id vector3 and converts to uv coordinates space
+float2 GetUV (uint3 id) {
+	return (id.xy + 0.5) * _Step - 1.0;
+}
+
+//takes in a thread_id and desired position for point, sets the points position in the position buffer
+// id.x+id.y*resolution, maps xy coordinates of thread in its group to 1darray index
+void SetPosition (uint3 id, float3 position) 
+{
+	if (id.x < _Resolution && id.y < _Resolution) 
+    {
+		_Positions[id.x + id.y * _Resolution] = position; 
+	}
+}
+
+#define PI 3.14159265358979323846
+
+// takes in uv coordinates of thread_id and time, returns cartesian coordinate vector for points
+float3 Wave (float u, float v, float t) 
+{
+	float3 p;
+	p.x = u;
+	p.y = sin(PI * (u + v + t));
+	p.z = v;
+	return p;
+}
+
+float3 MultiWave (float u, float v, float t) {
+	float3 p;
+	p.x = u;
+	p.y = sin(PI * (u + 0.5 * t));
+	p.y += 0.5 * sin(2.0 * PI * (v + t));
+	p.y += sin(PI * (u + v + 0.25 * t));
+	p.y *= 1.0 / 2.5;
+	p.z = v;
+	return p;
+}
+float3 OceanWave (float u, float v, float t) // f(x,t) = sin(pi(x+(0.5 *t)) + 0.5sin(2pi(x+t)) 
+{
+    float3 p;
+    p.x = u;
+    p.y = 0.3 * sin(PI * (u + 0.5 * t));
+    p.y += 0.3 * sin(2.0 * PI * (v + t));
+    // p.y += sin(PI * (u + v + 0.25 * t));
+    p.y += 0.3*sin(3 * PI * (u + v + 0.15 * t));
+    p.y += -0.3*sin(0.3 *PI * (u + v + 0.55 * t));
+    p.y += -0.3*sin(2.0 *PI * (u + v + 0.85 * t));
+    p.y += 0.3*sin(0.1*PI * (u + v + 0.25 * t));
+    p.y += -0.3 *sin(0.4*PI * (u + v + 0.75 * t));
+    p.y *= 1.0 / 2.5;
+    p.z = v;
+    return p;
+}
+float3 Ripple (float u, float v, float t) {
+	float d = sqrt(u * u + v * v);
+	float3 p;
+	p.x = u;
+	p.y = sin(PI * (4.0 * d - t));
+	p.y /= 1.0 + 10.0 * d;
+	p.z = v;
+	return p;
+}
+
+float3 Sphere (float u, float v, float t) {
+	float r = 0.9 + 0.1 * sin(PI * (6.0 * u + 4.0 * v + t));
+	float s = r * cos(0.5 * PI * v);
+	float3 p;
+	p.x = s * sin(PI * u);
+	p.y = r * sin(0.5 * PI * v);
+	p.z = s * cos(PI * u);
+	return p;
+}
+float3 RotatingRidgedSphere (float u, float v, float t) 
+{
+    float r = 0.9 + 0.1 * sin(PI * (6.0 * u + 4.0 * v + t));
+    float s = r * cos(0.5 * PI * v);
+    float3 p;
+    p.x = s * sin(PI * u);
+    p.y = r * sin(0.5 * PI * v);
+    p.z = s * cos(PI * u);
+    return p;
+}
+float3 Torus (float u, float v, float t) {
+	float r1 = 0.7 + 0.1 * sin(PI * (6.0 * u + 0.5 * t));
+	float r2 = 0.15 + 0.05 * sin(PI * (8.0 * u + 4.0 * v + 2.0 * t));
+	float s = r2 * cos(PI * v) + r1;
+	float3 p;
+	p.x = s * sin(PI * u);
+	p.y = r2 * sin(PI * v);
+	p.z = s * cos(PI * u);
+	return p;
+}
+float3 RotatingRidgedTorus (float u, float v, float t) 
+{
+    float r1 = 0.7 + 0.1 * sin(PI * (6.0 * u + 0.5 * t));// radius from the origin to the center of the tunnel
+    float r2 = 0.15 + 0.05 * sin(PI * (8.0 * u + 4.0 * v + 2.0 * t));// radius from the center of the tunnel to the outside of tunnel 
+    float s = r1 + r2 * cos(PI * v);
+    float3 p;
+    p.x = s * sin(PI * u);
+    p.y = r2 * sin(PI * v);
+    p.z = s * cos(PI * u);
+    return p;
+}
+// acts as main function
+#define KERNEL_FUNCTION(function) \
+	[numthreads(8, 8, 1)] \
+	void function##Kernel (uint3 id: SV_DispatchThreadID) \
+    { \
+		float2 uv = GetUV(id); \
+		SetPosition(id, function(uv.x, uv.y, _Time)); \
+	}
+
+#define KERNEL_MORPH_FUNCTION(functionA, functionB) \
+	[numthreads(8, 8, 1)] \
+	void functionA##To##functionB##Kernel (uint3 id: SV_DispatchThreadID) { \
+		float2 uv = GetUV(id); \
+		float3 position = lerp( \
+			functionA(uv.x, uv.y, _Time), functionB(uv.x, uv.y, _Time), \
+			_TransitionProgress \
+		); \
+		SetPosition(id, position); \
+	}
+
+
+KERNEL_FUNCTION(Wave)
+KERNEL_FUNCTION(MultiWave)
+KERNEL_FUNCTION(Ripple)
+KERNEL_FUNCTION(Sphere)
+KERNEL_FUNCTION(RotatingRidgedSphere)
+KERNEL_FUNCTION(Torus)
+KERNEL_FUNCTION(RotatingRidgedTorus)
+KERNEL_FUNCTION(OceanWave)
+
+KERNEL_MORPH_FUNCTION(Wave, MultiWave);
+KERNEL_MORPH_FUNCTION(Wave, Ripple);
+KERNEL_MORPH_FUNCTION(Wave, Sphere);
+KERNEL_MORPH_FUNCTION(Wave, RotatingRidgedSphere);
+KERNEL_MORPH_FUNCTION(Wave, Torus);
+KERNEL_MORPH_FUNCTION(Wave, RotatingRidgedTorus);
+KERNEL_MORPH_FUNCTION(Wave, OceanWave);
+
+KERNEL_MORPH_FUNCTION(MultiWave, Wave);
+KERNEL_MORPH_FUNCTION(MultiWave, Ripple);
+KERNEL_MORPH_FUNCTION(MultiWave, Sphere);
+KERNEL_MORPH_FUNCTION(MultiWave, RotatingRidgedSphere);
+KERNEL_MORPH_FUNCTION(MultiWave, Torus);
+KERNEL_MORPH_FUNCTION(MultiWave, RotatingRidgedTorus);
+KERNEL_MORPH_FUNCTION(MultiWave, OceanWave);
+
+KERNEL_MORPH_FUNCTION(Ripple, Wave);
+KERNEL_MORPH_FUNCTION(Ripple, MultiWave);
+KERNEL_MORPH_FUNCTION(Ripple, Sphere);
+KERNEL_MORPH_FUNCTION(Ripple, RotatingRidgedSphere);
+KERNEL_MORPH_FUNCTION(Ripple, Torus);
+KERNEL_MORPH_FUNCTION(Ripple, RotatingRidgedTorus);
+KERNEL_MORPH_FUNCTION(Ripple, OceanWave);
+
+KERNEL_MORPH_FUNCTION(Sphere, Wave);
+KERNEL_MORPH_FUNCTION(Sphere, MultiWave);
+KERNEL_MORPH_FUNCTION(Sphere, Ripple);
+KERNEL_MORPH_FUNCTION(Sphere, RotatingRidgedSphere);
+KERNEL_MORPH_FUNCTION(Sphere, Torus);
+KERNEL_MORPH_FUNCTION(Sphere, RotatingRidgedTorus);
+KERNEL_MORPH_FUNCTION(Sphere, OceanWave);
+
+KERNEL_MORPH_FUNCTION(RotatingRidgedSphere, Wave);
+KERNEL_MORPH_FUNCTION(RotatingRidgedSphere, MultiWave);
+KERNEL_MORPH_FUNCTION(RotatingRidgedSphere, Ripple);
+KERNEL_MORPH_FUNCTION(RotatingRidgedSphere, Sphere);
+KERNEL_MORPH_FUNCTION(RotatingRidgedSphere, Torus);
+KERNEL_MORPH_FUNCTION(RotatingRidgedSphere, RotatingRidgedTorus);
+KERNEL_MORPH_FUNCTION(RotatingRidgedSphere, OceanWave);
+
+KERNEL_MORPH_FUNCTION(Torus, Wave);
+KERNEL_MORPH_FUNCTION(Torus, MultiWave);
+KERNEL_MORPH_FUNCTION(Torus, Ripple);
+KERNEL_MORPH_FUNCTION(Torus, Sphere);
+KERNEL_MORPH_FUNCTION(Torus, RotatingRidgedSphere);
+KERNEL_MORPH_FUNCTION(Torus, RotatingRidgedTorus);
+KERNEL_MORPH_FUNCTION(Torus, OceanWave);
+
+KERNEL_MORPH_FUNCTION(RotatingRidgedTorus, Wave);
+KERNEL_MORPH_FUNCTION(RotatingRidgedTorus, MultiWave);
+KERNEL_MORPH_FUNCTION(RotatingRidgedTorus, Ripple);
+KERNEL_MORPH_FUNCTION(RotatingRidgedTorus, Sphere);
+KERNEL_MORPH_FUNCTION(RotatingRidgedTorus, RotatingRidgedSphere);
+KERNEL_MORPH_FUNCTION(RotatingRidgedTorus, Torus);
+KERNEL_MORPH_FUNCTION(RotatingRidgedTorus, OceanWave);
+
+KERNEL_MORPH_FUNCTION(OceanWave, Wave);
+KERNEL_MORPH_FUNCTION(OceanWave, MultiWave);
+KERNEL_MORPH_FUNCTION(OceanWave, Ripple);
+KERNEL_MORPH_FUNCTION(OceanWave, Sphere);
+KERNEL_MORPH_FUNCTION(OceanWave, RotatingRidgedSphere);
+KERNEL_MORPH_FUNCTION(OceanWave, Torus);
+KERNEL_MORPH_FUNCTION(OceanWave, RotatingRidgedTorus);

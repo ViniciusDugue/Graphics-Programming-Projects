@@ -4,32 +4,60 @@ using UnityEngine;
 
 public class GPUGraph : MonoBehaviour
 {
-    [SerializeField] Transform pointPrefab;
-    [SerializeField, Range(10,200)] int resolution;
+    const int maxResolution = 1000;
+    [SerializeField, Range(10,maxResolution)] int resolution;
 
     [SerializeField] FunctionLibrary.FunctionName function;
     public enum TransitionMode { Cycle, Random }
 	[SerializeField] TransitionMode transitionMode;
     [SerializeField, Min(0f)] float functionDuration = 1f, transitionDuration = 1f;
 
-    Transform[] points;
     float duration;
     bool transitioning;
 	FunctionLibrary.FunctionName transitionFunction;
 
-    void Awake () 
-    {
-        // instantiates points at certain resolution
-        float step = 2f / resolution;
-        Vector3 scale = Vector3.one * step;
-        points = new Transform[resolution * resolution];
+    ComputeBuffer positionsBuffer;
+    [SerializeField] ComputeShader computeShader;
 
-		for (int i = 0; i < points.Length; i++) 
+    static readonly int
+    positionsId = Shader.PropertyToID("_Positions"),
+    resolutionId = Shader.PropertyToID("_Resolution"),
+    stepId = Shader.PropertyToID("_Step"),
+    timeId = Shader.PropertyToID("_Time"),
+	transitionProgressId = Shader.PropertyToID("_TransitionProgress");
+
+    [SerializeField] Material material;
+
+	[SerializeField] Mesh mesh;
+    // updates the resolution, step, time values of the compute shader
+    void UpdateFunctionOnGPU () 
+    {
+        float step = 2f / resolution;
+        computeShader.SetInt(resolutionId, resolution);
+        computeShader.SetFloat(stepId, step);
+        computeShader.SetFloat(timeId, Time.time);
+        if (transitioning) 
         {
-			Transform point = points[i] = Instantiate(pointPrefab);
-            point.localScale = scale;
-            point.SetParent(transform, false);
+			computeShader.SetFloat(transitionProgressId, Mathf.SmoothStep(0f, 1f, duration / transitionDuration));
 		}
+        var kernelIndex = (int)function + (int)(transitioning ? transitionFunction : function) * 8;
+        computeShader.SetBuffer(kernelIndex, positionsId, positionsBuffer);
+        int groups = Mathf.CeilToInt(resolution / 8f);
+        computeShader.Dispatch(kernelIndex, groups, groups, 1);
+        material.SetBuffer(positionsId, positionsBuffer);
+		material.SetFloat(stepId, step);
+        var bounds = new Bounds(Vector3.zero, Vector3.one * (2f + 2f / resolution));
+		Graphics.DrawMeshInstancedProcedural(mesh, 0, material, bounds, resolution * resolution);
+    }
+
+	void OnEnable () {
+		positionsBuffer = new ComputeBuffer(maxResolution * maxResolution, 3 * 4);
+	}
+
+    void OnDisable () 
+    {
+		positionsBuffer.Release();
+        positionsBuffer = null;
 	}
 
     void Update () 
@@ -37,23 +65,20 @@ public class GPUGraph : MonoBehaviour
         duration += Time.deltaTime;
 		if (transitioning) 
         {
-			if (duration >= transitionDuration) {
+			if (duration >= transitionDuration) 
+            {
 				duration -= transitionDuration;
 				transitioning = false;
 			}
 		}
-		else if (duration >= functionDuration) {
+		else if (duration >= functionDuration) 
+        {
 			duration -= functionDuration;
 			transitioning = true;
 			transitionFunction = function;
 			PickNextFunction();
 		}
-        if (transitioning) {
-			UpdateFunctionTransition();
-		}
-		else {
-			UpdateFunction();
-		}
+        UpdateFunctionOnGPU();
     }
 
     void PickNextFunction () 
@@ -61,48 +86,6 @@ public class GPUGraph : MonoBehaviour
 		function = transitionMode == TransitionMode.Cycle ?
 			FunctionLibrary.GetNextFunctionName(function) :
 			FunctionLibrary.GetRandomFunctionNameOtherThan(function);
-	}
-    void UpdateFunctionTransition () 
-    {
-		FunctionLibrary.Function
-			from = FunctionLibrary.GetFunction(transitionFunction),
-			to = FunctionLibrary.GetFunction(function);
-		float progress = duration / transitionDuration;
-		float time = Time.time;
-		float step = 2f / resolution;
-		float v = 0.5f * step - 1f;
-		for (int i = 0, x = 0, z = 0; i < points.Length; i++, x++) 
-        {
-			if (x == resolution) 
-            {
-				x = 0;
-				z += 1;
-				v = (z + 0.5f) * step - 1f;// the 0.5 shifts each point to be located in the center of a grid cell
-			}
-			float u = (x + 0.5f) * step - 1f;
-			points[i].localPosition = FunctionLibrary.Morph(u, v, time, from, to, progress);
-		}
-	}
-
-    void UpdateFunction () 
-    {
-		// initializes points in a grid pattern, spaced out with step 
-        // updates those points 
-		FunctionLibrary.Function f = FunctionLibrary.GetFunction(function);
-		float time = Time.time;
-		float step = 2f / resolution;
-		float v = 0.5f * step - 1f;
-		for (int i = 0, x = 0, z = 0; i < points.Length; i++, x++) 
-        {
-			if (x == resolution) 
-            {
-				x = 0;
-				z += 1;
-				v = (z + 0.5f) * step - 1f;// the 0.5 shifts each point to be located in the center of a grid cell
-			}
-			float u = (x + 0.5f) * step - 1f;
-			points[i].localPosition = f(u, v, time);
-	    }
 	}
 }
 
