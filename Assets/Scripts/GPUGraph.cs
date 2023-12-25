@@ -4,7 +4,7 @@ using UnityEngine;
 
 public class GPUGraph : MonoBehaviour
 {
-    const int maxResolution = 1000;
+    const int maxResolution = 10000;
     [SerializeField, Range(10,maxResolution)] int resolution;
 
     [SerializeField] FunctionLibrary.FunctionName function;
@@ -42,7 +42,7 @@ public class GPUGraph : MonoBehaviour
 		}
         var kernelIndex = (int)function + (int)(transitioning ? transitionFunction : function) * 8;
         computeShader.SetBuffer(kernelIndex, positionsId, positionsBuffer);
-        int groups = Mathf.CeilToInt(resolution / 8f);
+        int groups = Mathf.CeilToInt(resolution / 8f);// number of thread groups per side of grid
         computeShader.Dispatch(kernelIndex, groups, groups, 1);
         material.SetBuffer(positionsId, positionsBuffer);
 		material.SetFloat(stepId, step);
